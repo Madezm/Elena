@@ -40,12 +40,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         texto = findViewById(R.id.texto)
-        findViewById<Button>(R.id.boton).setOnClickListener {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED
-            ) escuchar() else permisoMic.launch(Manifest.permission.RECORD_AUDIO)
+        findViewById<Button>(R.id.boton).setOnClickListener { iniciar() }
+        if (intent.getBooleanExtra("escuchar_al_abrir", false) ||
+            intent.action == Intent.ACTION_ASSIST
+        ) {
+            iniciar()
         }
+    }
+
+    private fun iniciar() {
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) escuchar() else permisoMic.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun escuchar() {
