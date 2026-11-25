@@ -25,14 +25,14 @@ class MainActivity : AppCompatActivity() {
         val frase = frases?.firstOrNull()?.lowercase(Locale.getDefault())
         if (frase != null) {
             texto.text = frase
-            procesar(frase)
+            Comandos.ejecutar(this, frase)
         }
     }
 
-    private val permisoMic = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { concedido ->
-        if (concedido) escuchar()
+    private val permisos = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { concedidos ->
+        if (concedidos[Manifest.permission.RECORD_AUDIO] == true) escuchar()
         else Toast.makeText(this, "Necesito el micrófono", Toast.LENGTH_SHORT).show()
     }
 
@@ -49,10 +49,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun iniciar() {
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        ) escuchar() else permisoMic.launch(Manifest.permission.RECORD_AUDIO)
+        val faltan = listOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.READ_CONTACTS
+        ).filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (faltan.isEmpty()) escuchar()
+        else permisos.launch(faltan.toTypedArray())
     }
 
     private fun escuchar() {
@@ -60,27 +64,8 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dime qué app abrir")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dime qué hacer")
         }
         voz.launch(intent)
-    }
-
-    private fun procesar(frase: String) {
-        if (!frase.startsWith("abre ")) {
-            Toast.makeText(this, "Di: abre y el nombre de la app", Toast.LENGTH_SHORT).show()
-            return
-        }
-        abrirApp(frase.removePrefix("abre ").trim())
-    }
-
-    private fun abrirApp(nombre: String) {
-        val pm = packageManager
-        val lanzador = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val app = pm.queryIntentActivities(lanzador, 0).firstOrNull {
-            it.loadLabel(pm).toString().lowercase(Locale.getDefault()).contains(nombre)
-        }
-        val abrir = app?.let { pm.getLaunchIntentForPackage(it.activityInfo.packageName) }
-        if (abrir != null) startActivity(abrir)
-        else Toast.makeText(this, "No encontré $nombre", Toast.LENGTH_SHORT).show()
     }
 }
