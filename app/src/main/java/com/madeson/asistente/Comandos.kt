@@ -119,8 +119,9 @@ object Comandos {
         intent.setPackage("com.whatsapp")
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
+            LlamadaAccesibilidad.pedirLlamada()
             contexto.startActivity(intent)
-            aviso(contexto, "Chat de $nombre listo. Toca el teléfono para llamar")
+            aviso(contexto, "Llamando a $nombre por WhatsApp")
         } catch (e: Exception) {
             aviso(contexto, "No pude abrir WhatsApp")
         }
