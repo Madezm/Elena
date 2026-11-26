@@ -12,7 +12,7 @@ class LlamadaAccesibilidad : AccessibilityService() {
 
         fun pedirLlamada() {
             quiereLlamar = true
-            limite = System.currentTimeMillis() + 15000
+            limite = System.currentTimeMillis() + 20000
         }
     }
 
@@ -31,9 +31,18 @@ class LlamadaAccesibilidad : AccessibilityService() {
         }
     }
 
-    private fun buscar(nodo: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun esLlamadaDeVoz(nodo: AccessibilityNodeInfo): Boolean {
         val desc = nodo.contentDescription?.toString()?.lowercase() ?: ""
-        if (desc.contains("llamada de voz") || desc.contains("voice call")) return nodo
+        val id = nodo.viewIdResourceName?.lowercase() ?: ""
+        if (desc.contains("video") || desc.contains("vídeo") || id.contains("video")) return false
+        if (desc.contains("llamada") || desc.contains("llamar") || desc.contains("voz")) return true
+        if (desc.contains("call") || desc.contains("voice")) return true
+        if (id.contains("voip_call") || id.contains("audio_call") || id.contains("voice_call")) return true
+        return false
+    }
+
+    private fun buscar(nodo: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (esLlamadaDeVoz(nodo)) return nodo
         for (i in 0 until nodo.childCount) {
             val hijo = nodo.getChild(i) ?: continue
             val encontrado = buscar(hijo)
