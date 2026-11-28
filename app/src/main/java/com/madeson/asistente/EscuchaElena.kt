@@ -1,3 +1,4 @@
+
 package com.madeson.asistente
 
 import android.app.Notification
@@ -44,7 +45,7 @@ class EscuchaElena : Service(), RecognitionListener {
     private fun prepararModelo() {
         try {
             val carpeta = File(filesDir, "modelo-es")
-            if (!File(carpeta, "am").exists()) {
+            if (carpeta.listFiles()?.firstOrNull { it.isDirectory } == null) {
                 mostrarNotificacion("Descargando voz en español...")
                 descargar(carpeta)
             }
@@ -68,7 +69,7 @@ class EscuchaElena : Service(), RecognitionListener {
                     archivo.mkdirs()
                 } else {
                     archivo.parentFile?.mkdirs()
-                    archivo.outputStream().use { zip.copyTo(it) }
+                    archivo.outputStream().use { salida -> zip.copyTo(salida) }
                 }
                 entrada = zip.nextEntry
             }
@@ -77,13 +78,21 @@ class EscuchaElena : Service(), RecognitionListener {
 
     private fun crearCanal() {
         if (Build.VERSION.SDK_INT >= 26) {
-            val canal = NotificationChannel("elena", "Elena escuchando", NotificationManager.IMPORTANCE_LOW)
+            val canal = NotificationChannel(
+                "elena",
+                "Elena escuchando",
+                NotificationManager.IMPORTANCE_LOW
+            )
             getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
         }
     }
 
     private fun construirNotificacion(texto: String): Notification {
-        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "elena") else Notification.Builder(this)
+        val b = if (Build.VERSION.SDK_INT >= 26) {
+            Notification.Builder(this, "elena")
+        } else {
+            Notification.Builder(this)
+        }
         return b.setContentTitle("Elena")
             .setContentText(texto)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
@@ -94,5 +103,40 @@ class EscuchaElena : Service(), RecognitionListener {
         val m = modelo ?: return
         mostrarNotificacion("Di: Hey Elena")
         val reconocedor = Recognizer(m, 16000.0f, "[\"hey elena\", \"[unk]\"]")
-        servicio = SpeechService(reconocedor
-                                 
+        servicio = SpeechService(reconocedor, 16000.0f)
+        servicio?.startListening(this)
+    }
+
+    private fun despertar() {
+        servicio?.stop()
+        servicio = null
+        val i = Intent(this, MainActivity::class.java)
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        i.putExtra("escuchar", true)
+        startActivity(i)
+        Thread {
+            Thread.sleep(8000)
+            empezarAEscuchar()
+        }.start()
+    }
+
+    override fun onPartialResult(hypothesis: String?) {
+        if (hypothesis != null && hypothesis.contains("hey elena")) despertar()
+    }
+
+    override fun onResult(hypothesis: String?) {
+        if (hypothesis != null && hypothesis.contains("hey elena")) despertar()
+    }
+
+    override fun onFinalResult(hypothesis: String?) {}
+
+    override fun onError(exception: Exception?) {}
+
+    override fun onTimeout() {}
+
+    override fun onDestroy() {
+        servicio?.stop()
+        servicio?.shutdown()
+        super.onDestroy()
+    }
+}
