@@ -4,11 +4,31 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
+import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import java.net.URLEncoder
 import java.util.Locale
 
 object Comandos {
+
+    private var voz: TextToSpeech? = null
+    private var vozLista = false
+    private var pendiente: String? = null
+
+    private fun hablar(contexto: Context, texto: String) {
+        if (voz == null) {
+            voz = TextToSpeech(contexto.applicationContext) { estado ->
+                if (estado == TextToSpeech.SUCCESS) {
+                    voz?.language = Locale("es")
+                    vozLista = true
+                    pendiente?.let { voz?.speak(it, TextToSpeech.QUEUE_FLUSH, null, "elena") }
+                    pendiente = null
+                }
+            }
+        }
+        if (vozLista) voz?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "elena")
+        else pendiente = texto
+    }
 
     fun ejecutar(contexto: Context, fraseOriginal: String) {
         val frase = fraseOriginal.lowercase(Locale.getDefault()).trim()
@@ -16,8 +36,11 @@ object Comandos {
         val busqueda = extraerBusqueda(frase)
         if (busqueda != null) {
             if (frase.contains("youtube")) {
-                buscarEnYouTube(contexto, busqueda.replace(" en youtube", "").trim())
+                val q = busqueda.replace(" en youtube", "").trim()
+                hablar(contexto, "Buscando $q en YouTube")
+                buscarEnYouTube(contexto, q)
             } else {
+                hablar(contexto, "Buscando $busqueda")
                 buscarEnGoogle(contexto, busqueda)
             }
             return
@@ -90,8 +113,12 @@ object Comandos {
             it.loadLabel(pm).toString().lowercase(Locale.getDefault()).contains(nombre)
         }
         val abrir = app?.let { pm.getLaunchIntentForPackage(it.activityInfo.packageName) }
-        if (abrir != null) contexto.startActivity(abrir)
-        else aviso(contexto, "No encontré $nombre")
+        if (abrir != null) {
+            hablar(contexto, "Abriendo $nombre")
+            contexto.startActivity(abrir)
+        } else {
+            aviso(contexto, "No encontré $nombre")
+        }
     }
 
     private fun buscarEnGoogle(contexto: Context, texto: String) {
@@ -147,5 +174,6 @@ object Comandos {
 
     private fun aviso(contexto: Context, texto: String) {
         Toast.makeText(contexto, texto, Toast.LENGTH_LONG).show()
+        hablar(contexto, texto)
     }
 }
