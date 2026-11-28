@@ -1,86 +1,105 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+package com.madeson.asistente
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.speech.RecognizerIntent
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import java.util.Locale
 
-    <queries>
-        <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
-        </intent>
-        <package android:name="com.whatsapp" />
-    </queries>
+class MainActivity : AppCompatActivity() {
 
-    <application
-        android:label="Elena"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+    private lateinit var texto: TextView
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.ASSIST" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
+    private val voz = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { resultado ->
+        val frases = resultado.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+        val frase = frases?.firstOrNull()?.lowercase(Locale.getDefault())
+        if (frase != null) {
+            texto.text = frase
+            Comandos.ejecutar(this, frase)
+        }
+    }
 
-        <service
-            android:name=".EscuchaElena"
-            android:exported="false"
-            android:foregroundServiceType="microphone" />
+    private val permisos = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { concedidos ->
+        if (concedidos[Manifest.permission.RECORD_AUDIO] == true) {
+            arrancarServicio()
+            escuchar()
+        } else {
+            Toast.makeText(this, "Necesito el micrófono", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-        <service
-            android:name=".LlamadaAccesibilidad"
-            android:exported="true"
-            android:label="Elena"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/config_accesibilidad" />
-        </service>
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        texto = findViewById(R.id.texto)
+        findViewById<Button>(R.id.boton).setOnClickListener { iniciar() }
+        if (debeEscuchar(intent)) {
+            iniciar()
+        } else {
+            arrancarServicio()
+        }
+    }
 
-        <service
-            android:name=".AsistenteInteractionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION">
-            <meta-data
-                android:name="android.voice_interaction"
-                android:resource="@xml/voice_interaction_service" />
-            <intent-filter>
-                <action android:name="android.service.voice.VoiceInteractionService" />
-            </intent-filter>
-        </service>
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (debeEscuchar(intent)) iniciar()
+    }
 
-        <service
-            android:name=".AsistenteSessionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+    private fun debeEscuchar(i: Intent?): Boolean {
+        if (i == null) return false
+        return i.getBooleanExtra("escuchar", false) ||
+            i.getBooleanExtra("escuchar_al_abrir", false) ||
+            i.action == Intent.ACTION_ASSIST
+    }
 
-        <service
-            android:name=".AsistenteRecognitionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
-            <intent-filter>
-                <action android:name="android.speech.RecognitionService" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <meta-data
-                android:name="android.speech"
-                android:resource="@xml/recognition_service" />
-        </service>
+    private fun arrancarServicio() {
+        val tieneMicro = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!tieneMicro) return
+        try {
+            ContextCompat.startForegroundService(this, Intent(this, EscuchaElena::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No pude activar Hey Elena", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-    </application>
-</manifest>
+    private fun iniciar() {
+        val lista = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.READ_CONTACTS
+        )
+        if (Build.VERSION.SDK_INT >= 33) {
+            lista.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val faltan = lista.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (faltan.isEmpty()) escuchar()
+        else permisos.launch(faltan.toTypedArray())
+    }
+
+    private fun escuchar() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Dime qué hacer")
+        }
+        voz.launch(intent)
+    }
+}
