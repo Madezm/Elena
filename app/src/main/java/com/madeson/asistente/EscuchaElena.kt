@@ -95,3 +95,4 @@ class EscuchaElena : Service(), RecognitionListener {
         mostrarNotificacion("Di: Hey Elena")
         val reconocedor = Recognizer(m, 16000.0f, "[\"hey elena\", \"[unk]\"]")
         servicio = SpeechService(reconocedor
+                                 
